@@ -31,12 +31,14 @@ void sendmsg (char *user, char *target, char *msg) {
 	// Send a request to the server to send the message (msg) to the target user (target)
 	// by creating the message structure and writing it to server's FIFO
 
+	struct message req;
+	strcpy(req.source, user);
+	strcpy(req.target, target);
+	strcpy(req.msg, msg);
 
+	int serverFIFO = open("serverFIFO",O_WRONLY);
 
-
-
-
-
+	write(serverFIFO, &req, sizeof(req));
 
 }
 
@@ -48,11 +50,23 @@ void* messageListener(void *arg) {
 	// following format
 	// Incoming message from [source]: [message]
 	// put an end of line at the end of the message
+	char* user_name = (char*) arg;
 
+	int fifo_id = open(user_name, O_RDONLY);
 
+	struct message req;
 
+	while (1) {
+		ssize_t read_bytes = read(fifo_id, &req, sizeof(req));
+		
+		if (read_bytes == 0) {
+			close(fifo_id);
+			fifo_id = open(user_name, O_RDONLY);
+			continue;
+		}
 
-
+		printf("Incoming message from %s: %s\n",req.source,req.msg);
+	}
 
 	pthread_exit((void*)0);
 }
@@ -76,8 +90,8 @@ int main(int argc, char **argv) {
     posix_spawnattr_t attr;
 
     if (argc!=2) {
-	printf("Usage: ./rsh <username>\n");
-	exit(1);
+		printf("Usage: ./rsh <username>\n");
+		exit(1);
     }
     signal(SIGINT,terminate);
 
@@ -85,10 +99,9 @@ int main(int argc, char **argv) {
 
     // TODO:
     // create the message listener thread
+	pthread_t listener;
 
-
-
-
+	pthread_create(&listener, NULL, messageListener, &uName);
 
     while (1) {
 
@@ -125,13 +138,26 @@ int main(int argc, char **argv) {
  		// printf("sendmsg: you have to enter a message\n");
 
 
+		char* target = strtok(NULL, " ");
+		if (target == NULL) {
+			printf("sendmsg: you have to specify target user\n");
+		}
 
+		char msg[200] = "";
 
+		char* word = strtok(NULL, " ");
 
+		if (word == NULL) {
+			printf("sendmsg: you have to enter a message\n");
+		}
 
-
-
-
+		while (word != NULL) {
+			strcat(msg, word);
+			strcat(msg, " ");
+			word = strtok(NULL, " ");
+		}
+		msg[strlen(msg) - 1] = '\0';
+		sendmsg(uName, target, msg);
 
 		continue;
 	}
